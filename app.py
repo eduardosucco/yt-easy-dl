@@ -6,14 +6,21 @@ import os
 # Para ler o .env localmente
 from dotenv import load_dotenv
 
+# IMPORTANTE: Importa o ffmpeg_static para ter o binário do ffmpeg
+import ffmpeg_static
+
 # Carrega as variáveis do arquivo .env
 load_dotenv()
 
 def download_video(video_url, filename="video_downloaded"):
-    """Faz o download do vídeo usando yt_dlp.Retorna o nome completo do arquivo baixado (com extensão)."""
+    """Faz o download do vídeo usando yt_dlp. Retorna o nome completo do arquivo baixado (com extensão)."""
+
+    # Apontamos o ffmpeg_location para o binário provido pelo python-ffmpeg-static
     ydl_opts = {
-        'outtmpl': f'{filename}.%(ext)s'  # Define o nome base do arquivo
+        'ffmpeg_location': ffmpeg_static.path,  # <-- Aqui está o pulo do gato
+        'outtmpl': f'{filename}.%(ext)s'        # Define o nome base do arquivo
     }
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([video_url])
     
@@ -28,28 +35,23 @@ def download_video(video_url, filename="video_downloaded"):
 
 def upload_to_dropbox(file_path):
     """Faz upload do arquivo para o Dropbox e retorna um link compartilhável."""
-    # Carrega o token do Dropbox a partir das variáveis de ambiente (ou .env)
     dropbox_token = os.getenv("DROPBOX_ACCESS_TOKEN", None)
     if not dropbox_token:
         raise ValueError("Token do Dropbox não encontrado. Verifique seu .env ou variáveis de ambiente.")
 
     dbx = dropbox.Dropbox(dropbox_token)
 
-    # Caminho no Dropbox (raiz do seu app ou pasta específica).
     dropbox_path = f"/{os.path.basename(file_path)}"
 
-    # Faz upload
     with open(file_path, "rb") as f:
         dbx.files_upload(f.read(), dropbox_path, mode=dropbox.files.WriteMode("overwrite"))
 
-    # Cria link compartilhável
     shared_link_metadata = dbx.sharing_create_shared_link_with_settings(dropbox_path)
     return shared_link_metadata.url
 
 def main():
-    st.title("YouTube Downloader com Upload para Dropbox")
+    st.title("YouTube Downloader com Upload para Dropbox (ffmpeg incluído)")
 
-    # Campo para inserir a URL do vídeo
     video_url = st.text_input("Cole aqui o link do vídeo do YouTube")
 
     if st.button("Baixar e Enviar para Dropbox"):
