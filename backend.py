@@ -16,12 +16,14 @@ def sanitize_title(title):
     return title
 
 def get_video_info(video_url):
-    """
-    Retorna metadados do vídeo, sem fazer download (thumbnail, título, duração, etc.)
-    """
-    with yt_dlp.YoutubeDL() as ydl:
-        info = ydl.extract_info(video_url, download=False)
-    return info
+    try:
+        with yt_dlp.YoutubeDL() as ydl:
+            info = ydl.extract_info(video_url, download=False)
+        return info
+    except Exception as e:
+        # Aqui você verifica se o erro tem algo a ver com 403 ou se é um "Forbidden"
+        # Você pode simplesmente relançar o erro ou tratá-lo com uma mensagem específica.
+        raise e
 
 def download_video(video_url, download_type="video"):
     """

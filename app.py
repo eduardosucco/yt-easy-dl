@@ -7,6 +7,14 @@ from backend import (
     upload_to_dropbox
 )
 
+# Defina a configuração da página (deve vir antes de qualquer comando que "desenhe" a página):
+st.set_page_config(
+    page_title="Meu Downloader de Vídeos",  # Nome que aparecerá na aba do navegador
+    page_icon="📺",                       # Pode ser um emoji, ou uma URL de imagem
+    layout="centered",                    # 'centered' ou 'wide'
+    initial_sidebar_state="expanded"      # se quiser começar com a barra lateral aberta
+)
+
 def main():
     # --- SIDEBAR ---
     st.sidebar.title("🎬 Ferramenta Pública de Download")
@@ -43,9 +51,12 @@ def main():
                 st.session_state.video_url = user_input_url
                 st.success("Pré-visualização carregada!")
             except Exception as e:
-                st.error(f"Erro ao carregar dados do vídeo: {e}")
+                # Aqui, se for um erro 403 ou algo específico,
+                # você pode checar, por ex: if "403" in str(e) ...
+                st.error(f"Erro ao carregar metadados do vídeo (talvez bloqueado): {e}")
         else:
             st.warning("Por favor, insira um link válido.")
+
 
     # Se já temos info do vídeo
     if st.session_state.video_info:
