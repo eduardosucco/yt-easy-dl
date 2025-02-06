@@ -12,14 +12,19 @@ def download_video(video_url, output_path="."):
     ydl_opts = {
         'outtmpl': os.path.join(output_path, '%(title)s-%(id)s.%(ext)s'),
         'format': 'bestvideo+bestaudio/best',  # Melhor qualidade de vídeo e áudio
+        'quiet': True, # Suprime a saída verbosa
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info_dict = ydl.extract_info(video_url, download=True)
-            video_filename = ydl.prepare_filename(info_dict) # Obtem o nome do arquivo baixado
-            return video_filename
+            try:
+                info_dict = ydl.extract_info(video_url, download=True)
+                video_filename = ydl.prepare_filename(info_dict) # Obtem o nome do arquivo baixado
+                return video_filename
+            except Exception as e:
+                print(f"Erro ao extrair informações do vídeo: {e}")
+                return None
     except Exception as e:
-        print(f"Erro ao baixar o vídeo: {e}")
+        print(f"Erro ao inicializar yt-dlp: {e}")
         return None
 
 def upload_to_dropbox(local_path, dropbox_path):
