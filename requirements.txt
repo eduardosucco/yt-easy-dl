@@ -2,4 +2,3 @@ streamlit
 yt-dlp
 dropbox
 python-dotenv
-python-ffmpeg-static
