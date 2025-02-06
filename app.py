@@ -8,52 +8,61 @@ from backend import (
 )
 
 def main():
+    # --- SIDEBAR ---
     st.sidebar.title("🎬 Ferramenta Pública de Download")
     st.sidebar.markdown("""
     **O que faz?**
-    - Baixa vídeos do YouTube e faz upload para o Dropbox.
+    - Baixa vídeos ou áudio (MP3) do YouTube.
+    - Faz upload para o Dropbox em `/streamlit-videos`.
     - Gera um **link** para você baixar o arquivo no seu dispositivo.
     
-    **Instruções rápidas**:
+    **Instruções**:
     1. Cole a URL do vídeo do YouTube.
-    2. Clique em **Carregar Pré-Visualização**.
-    3. Confira a capa e as informações do vídeo.
-    4. Escolha se quer baixar **Vídeo** ou **Áudio (MP3)**.
-    5. Clique em **Baixar & Enviar** para receber um link de download.
+    2. Clique em **Carregar Pré-Visualização** para ver capa e dados.
+    3. Escolha **Vídeo** ou **Áudio**.
+    4. Clique em **Baixar & Enviar** para receber o link de download.
     """)
 
-    st.title("Ferramenta Pública de Download (via Dropbox) 🎉")
+    st.title("Ferramenta de Download (via Dropbox) 🎉")
 
     video_url = st.text_input("Cole aqui o link do YouTube:", "")
 
-    # Guardar metadados na sessão
+    # Session state para guardar metadados e URL
     if "video_info" not in st.session_state:
         st.session_state.video_info = None
+    if "video_url" not in st.session_state:
+        st.session_state.video_url = ""
 
+    # Botão para pré-visualizar
     if st.button("🔍 Carregar Pré-Visualização"):
-        if video_url.strip():
+        user_input_url = video_url.strip()
+        if user_input_url:
             try:
-                info = get_video_info(video_url.strip())
+                info = get_video_info(user_input_url)
                 st.session_state.video_info = info
+                st.session_state.video_url = user_input_url
                 st.success("Pré-visualização carregada!")
             except Exception as e:
-                st.error(f"Erro ao carregar metadados do vídeo: {e}")
+                st.error(f"Erro ao carregar dados do vídeo: {e}")
         else:
             st.warning("Por favor, insira um link válido.")
 
+    # Se já temos info do vídeo
     if st.session_state.video_info:
         info = st.session_state.video_info
 
-        # Mostrar thumbnail
+        # Exibir thumbnail
         thumbnail = info.get("thumbnail")
         if thumbnail:
+            # use_container_width em vez de use_column_width
             st.image(thumbnail, caption="Capa do Vídeo", use_container_width=True)
 
-        # Montar dados do vídeo
+        # Título, canal, data, duração
         title = info.get("title", "Sem título")
         uploader = info.get("uploader", "Desconhecido")
         upload_date = info.get("upload_date")
         if upload_date and len(upload_date) == 8:
+            # Converter para DD/MM/YYYY
             upload_date = f"{upload_date[6:]}/{upload_date[4:6]}/{upload_date[0:4]}"
 
         duration = info.get("duration", 0)
@@ -67,6 +76,7 @@ def main():
         else:
             dur_str = "Desconhecida"
 
+        # Criar dataframe para exibir como tabela
         table_data = [
             {"Informação": "Título", "Valor": title},
             {"Informação": "Canal", "Valor": uploader},
@@ -76,17 +86,26 @@ def main():
         df = pd.DataFrame(table_data).set_index("Informação")
         st.table(df)
 
-        # Seletor para escolher vídeo ou áudio
-        download_type = st.radio("Escolha o tipo de download:", ["Vídeo (MP4)", "Áudio (MP3)"])
+        # Radio para escolher entre vídeo ou áudio
+        download_type = st.radio(
+            "Escolha o tipo de download:",
+            ["Vídeo (MP4)", "Áudio (MP3)"]
+        )
 
+        # Botão de baixar
         if st.button("⬇️ Baixar & Enviar para Dropbox"):
+            # Verifica se temos URL válida
+            real_url = st.session_state.video_url.strip()
+            if not real_url:
+                st.error("URL vazia. Carregue a pré-visualização novamente.")
+                return
+
             st.info("Baixando...")
             try:
                 if download_type == "Áudio (MP3)":
-                    downloaded_file = download_video(video_url.strip(), download_type="audio")
+                    downloaded_file = download_video(real_url, download_type="audio")
                 else:
-                    downloaded_file = download_video(video_url.strip(), download_type="video")
-
+                    downloaded_file = download_video(real_url, download_type="video")
             except Exception as e:
                 st.error(f"Erro ao baixar: {e}")
                 return
@@ -95,16 +114,18 @@ def main():
                 st.error("Não foi possível encontrar o arquivo baixado.")
                 return
 
+            # Upload
             st.info("Enviando ao Dropbox...")
             try:
                 link = upload_to_dropbox(downloaded_file)
                 st.success("Upload concluído! ✅")
-                # Forçar download no Dropbox trocando ?dl=0 -> ?dl=1
+                # Forçar download
                 link = link.replace("?dl=0", "?dl=1")
                 st.markdown(f"[**Link para download**]({link})")
             except Exception as e:
-                st.error(f"Erro ao enviar: {e}")
+                st.error(f"Erro ao enviar para Dropbox: {e}")
             finally:
+                # Remove local
                 if os.path.exists(downloaded_file):
                     os.remove(downloaded_file)
 
