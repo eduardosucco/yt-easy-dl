@@ -51,25 +51,34 @@ def main():
         if thumbnail:
             st.image(thumbnail, caption="Capa do Vídeo", use_container_width=True)
 
-        # Informações do vídeo
+        # Extrai informações
         title = info.get("title", "Sem título")
         uploader = info.get("uploader", "Desconhecido")
-        upload_date = info.get("upload_date")  # YYYYMMDD
+        upload_date = info.get("upload_date")  # Formato YYYYMMDD
         if upload_date and len(upload_date) == 8:
-            # Converter para algo mais legível
+            # Converter para algo mais legível (DD/MM/YYYY)
             upload_date = f"{upload_date[6:]}/{upload_date[4:6]}/{upload_date[0:4]}"
+
         duration = info.get("duration", 0)  # em segundos
-
-        st.write(f"**Título**: {title}")
-        st.write(f"**Canal**: {uploader}")
-        if upload_date:
-            st.write(f"**Data de Postagem**: {upload_date}")
-
         if duration:
             mins, secs = divmod(duration, 60)
             hours, mins = divmod(mins, 60)
-            dur_str = f"{hours}h {mins}m {secs}s" if hours else f"{mins}m {secs}s"
-            st.write(f"**Duração**: {dur_str}")
+            if hours > 0:
+                dur_str = f"{hours}h {mins}m {secs}s"
+            else:
+                dur_str = f"{mins}m {secs}s"
+        else:
+            dur_str = "Desconhecida"
+
+        # Monta dados para a tabela (cada dict vira uma linha)
+        table_data = [
+            {"Informação": "Título", "Valor": title},
+            {"Informação": "Canal", "Valor": uploader},
+            {"Informação": "Data de Postagem", "Valor": upload_date if upload_date else "Desconhecida"},
+            {"Informação": "Duração", "Valor": dur_str},
+        ]
+        
+        st.table(table_data)
 
         # Botão de BAIXAR, somente aparece após ter pré-visualização
         if st.button("⬇️ Baixar & Enviar para Dropbox"):
@@ -88,6 +97,8 @@ def main():
             try:
                 link = upload_to_dropbox(downloaded_file)
                 st.success("Upload concluído! ✅")
+                # Se quiser forçar o download, troque "?dl=0" por "?dl=1"
+                link = link.replace("?dl=0", "?dl=1")
                 st.markdown(f"**Link de download**: [Clique aqui]({link})")
             except Exception as e:
                 st.error(f"Erro ao enviar para o Dropbox: {e}")
