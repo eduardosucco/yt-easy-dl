@@ -49,7 +49,7 @@ def main():
         # Exibe thumbnail (se existir)
         thumbnail = info.get("thumbnail")
         if thumbnail:
-            st.image(thumbnail, caption="Capa do Vídeo", use_column_width=True)
+            st.image(thumbnail, caption="Capa do Vídeo", use_container_width=True)
 
         # Informações do vídeo
         title = info.get("title", "Sem título")
