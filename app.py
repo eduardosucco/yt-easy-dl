@@ -1,11 +1,9 @@
 import streamlit as st
 import os
-
-# Importa as funções do backend
 from backend import download_video, upload_to_dropbox
 
 def main():
-    st.title("YouTube Downloader + Upload para Dropbox (Separado em backend.py)")
+    st.title("YouTube Downloader + Upload para Dropbox")
 
     video_url = st.text_input("Cole aqui o link do vídeo do YouTube")
 
@@ -26,7 +24,7 @@ def main():
             except Exception as e:
                 st.error(f"Ocorreu um erro ao enviar para o Dropbox: {e}")
             finally:
-                # Limpa o arquivo local para não lotar armazenamento
+                # Remove o arquivo local
                 if downloaded_file and os.path.exists(downloaded_file):
                     os.remove(downloaded_file)
         else:

@@ -2,3 +2,4 @@ streamlit
 yt-dlp
 dropbox
 python-dotenv
+requests
