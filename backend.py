@@ -16,13 +16,20 @@ def sanitize_title(title):
     return title
 
 def get_video_info(video_url):
+    """
+    Retorna metadados do vídeo (thumbnail, título, duração, etc.).
+    Se ocorrer um erro 403 (acesso negado), levantamos uma Exception específica.
+    """
     try:
         with yt_dlp.YoutubeDL() as ydl:
             info = ydl.extract_info(video_url, download=False)
         return info
     except Exception as e:
-        # Aqui você verifica se o erro tem algo a ver com 403 ou se é um "Forbidden"
-        # Você pode simplesmente relançar o erro ou tratá-lo com uma mensagem específica.
+        # Se detectar algo como "403: Forbidden" na string do erro,
+        # levantamos uma exceção amigável.
+        if "403" in str(e):
+            raise ValueError("Erro 403: Vídeo bloqueado ou requer login.")
+        # Caso contrário, simplesmente relançamos o erro original
         raise e
 
 def download_video(video_url, download_type="video"):
@@ -32,18 +39,15 @@ def download_video(video_url, download_type="video"):
     """
     ffmpeg_bin = "bin/ffmpeg"  # Caminho do binário ffmpeg no repositório
 
-    # Extrai informações
     info = get_video_info(video_url)
     raw_title = info.get("title", "video_sem_titulo")
     safe_title = sanitize_title(raw_title)
 
-    # Cria pasta local para salvar
     os.makedirs("videos", exist_ok=True)
     now_str = datetime.now().strftime("%Y%m%d_%H%M")
     final_name = f"{safe_title}_{now_str}"
 
     if download_type == "audio":
-        # Baixar só áudio e converter para MP3
         ydl_opts = {
             'outtmpl': f'videos/{final_name}.%(ext)s',
             'ffmpeg_location': ffmpeg_bin,
@@ -56,7 +60,6 @@ def download_video(video_url, download_type="video"):
         }
         expected_extensions = ["mp3"]
     else:
-        # Baixar o vídeo
         ydl_opts = {
             'outtmpl': f'videos/{final_name}.%(ext)s',
             'ffmpeg_location': ffmpeg_bin,
@@ -66,7 +69,6 @@ def download_video(video_url, download_type="video"):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([video_url])
 
-    # Descobrir qual extensão foi salva
     for ext in expected_extensions:
         candidate = f"videos/{final_name}.{ext}"
         if os.path.exists(candidate):
@@ -76,8 +78,7 @@ def download_video(video_url, download_type="video"):
 
 def upload_to_dropbox(file_path):
     """
-    Faz upload do arquivo para a pasta /streamlit-videos no Dropbox e retorna um link compartilhável.
-    Substitua "?dl=0" por "?dl=1" para forçar download.
+    Faz upload do arquivo para a pasta /streamlit-videos no Dropbox e retorna um link de download (dl=1).
     """
     dropbox_token = os.getenv("DROPBOX_ACCESS_TOKEN")
     if not dropbox_token:
@@ -85,20 +86,18 @@ def upload_to_dropbox(file_path):
 
     dbx = dropbox.Dropbox(dropbox_token)
 
-    # Garante a pasta /streamlit-videos
+    # Garantir pasta /streamlit-videos
     folder_name = "/streamlit-videos"
     try:
         dbx.files_create_folder_v2(folder_name)
     except dropbox.exceptions.ApiError as e:
-        # Se já existe, ignora o erro
         if "folder_conflict" not in str(e):
             raise e
 
-    # Caminho no Dropbox
     dropbox_path = f"{folder_name}/{os.path.basename(file_path)}"
-
     with open(file_path, "rb") as f:
         dbx.files_upload(f.read(), dropbox_path, mode=dropbox.files.WriteMode("overwrite"))
 
     link_info = dbx.sharing_create_shared_link_with_settings(dropbox_path)
-    return link_info.url
+    # Força download substituindo ?dl=0 por ?dl=1
+    return link_info.url.replace("?dl=0", "?dl=1")

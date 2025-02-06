@@ -7,34 +7,34 @@ from backend import (
     upload_to_dropbox
 )
 
-# Defina a configuração da página (deve vir antes de qualquer comando que "desenhe" a página):
+# Ajuste de config (nome da aba e ícone)
 st.set_page_config(
-    page_title="Meu Downloader de Vídeos",  # Nome que aparecerá na aba do navegador
-    page_icon="📺",                       # Pode ser um emoji, ou uma URL de imagem
-    layout="centered",                    # 'centered' ou 'wide'
-    initial_sidebar_state="expanded"      # se quiser começar com a barra lateral aberta
+    page_title="Meu Downloader de Vídeos",
+    page_icon="📺",
+    layout="centered"
 )
 
 def main():
-    # --- SIDEBAR ---
+    # SIDEBAR
     st.sidebar.title("🎬 Ferramenta Pública de Download")
     st.sidebar.markdown("""
     **O que faz?**
     - Baixa vídeos ou áudio (MP3) do YouTube.
-    - Gera um **link** para você baixar o arquivo no seu dispositivo.
+    - Faz upload para o Dropbox em `/streamlit-videos`.
+    - Gera um **link** de download para seu dispositivo.
     
     **Instruções**:
-    1. Cole a URL do vídeo do YouTube.
+    1. Cole a URL do YouTube.
     2. Clique em **Carregar Pré-Visualização** para ver capa e dados.
     3. Escolha **Vídeo** ou **Áudio**.
-    4. Clique em **Baixar & Enviar** para receber o link de download.
+    4. Clique em **Baixar & Enviar**.
     """)
 
     st.title("Ferramenta de Download (via Dropbox) 🎉")
 
     video_url = st.text_input("Cole aqui o link do YouTube:", "")
 
-    # Session state para guardar metadados e URL
+    # Session state
     if "video_info" not in st.session_state:
         st.session_state.video_info = None
     if "video_url" not in st.session_state:
@@ -46,47 +46,45 @@ def main():
         if user_input_url:
             try:
                 info = get_video_info(user_input_url)
+                # Se der erro 403 ou outro, cairá no except
                 st.session_state.video_info = info
                 st.session_state.video_url = user_input_url
                 st.success("Pré-visualização carregada!")
+            except ValueError as ve:
+                if "403" in str(ve):
+                    st.error("Erro 403: Este vídeo está bloqueado ou requer login. Tente outro.")
+                else:
+                    st.error(f"Erro ao carregar dados do vídeo: {ve}")
             except Exception as e:
-                # Aqui, se for um erro 403 ou algo específico,
-                # você pode checar, por ex: if "403" in str(e) ...
-                st.error(f"Erro ao carregar metadados do vídeo (talvez bloqueado): {e}")
+                st.error(f"Erro ao carregar dados do vídeo: {e}")
         else:
             st.warning("Por favor, insira um link válido.")
 
-
-    # Se já temos info do vídeo
+    # Exibir info se já carregou
     if st.session_state.video_info:
         info = st.session_state.video_info
 
         # Exibir thumbnail
         thumbnail = info.get("thumbnail")
         if thumbnail:
-            # use_container_width em vez de use_column_width
             st.image(thumbnail, caption="Capa do Vídeo", use_container_width=True)
 
-        # Título, canal, data, duração
+        # Informações (título, canal, data, duração)
         title = info.get("title", "Sem título")
         uploader = info.get("uploader", "Desconhecido")
         upload_date = info.get("upload_date")
         if upload_date and len(upload_date) == 8:
-            # Converter para DD/MM/YYYY
+            # Converte YYYYMMDD -> DD/MM/YYYY
             upload_date = f"{upload_date[6:]}/{upload_date[4:6]}/{upload_date[0:4]}"
 
         duration = info.get("duration", 0)
         if duration:
             mins, secs = divmod(duration, 60)
             hours, mins = divmod(mins, 60)
-            if hours > 0:
-                dur_str = f"{hours}h {mins}m {secs}s"
-            else:
-                dur_str = f"{mins}m {secs}s"
+            dur_str = f"{hours}h {mins}m {secs}s" if hours else f"{mins}m {secs}s"
         else:
             dur_str = "Desconhecida"
 
-        # Criar dataframe para exibir como tabela
         table_data = [
             {"Informação": "Título", "Valor": title},
             {"Informação": "Canal", "Valor": uploader},
@@ -96,18 +94,16 @@ def main():
         df = pd.DataFrame(table_data).set_index("Informação")
         st.table(df)
 
-        # Radio para escolher entre vídeo ou áudio
+        # Botões de tipo de download
         download_type = st.radio(
             "Escolha o tipo de download:",
             ["Vídeo (MP4)", "Áudio (MP3)"]
         )
 
-        # Botão de baixar
         if st.button("⬇️ Baixar & Enviar para Dropbox"):
-            # Verifica se temos URL válida
             real_url = st.session_state.video_url.strip()
             if not real_url:
-                st.error("URL vazia. Carregue a pré-visualização novamente.")
+                st.error("URL vazia. Recarregue a pré-visualização.")
                 return
 
             st.info("Baixando...")
@@ -116,27 +112,25 @@ def main():
                     downloaded_file = download_video(real_url, download_type="audio")
                 else:
                     downloaded_file = download_video(real_url, download_type="video")
-            except Exception as e:
-                st.error(f"Erro ao baixar: {e}")
-                return
 
-            if not downloaded_file or not os.path.exists(downloaded_file):
-                st.error("Não foi possível encontrar o arquivo baixado.")
-                return
+                if not downloaded_file or not os.path.exists(downloaded_file):
+                    st.error("Não foi possível encontrar o arquivo baixado.")
+                    return
 
-            # Upload
-            st.info("Enviando ao Dropbox...")
-            try:
+                st.info("Enviando ao Dropbox...")
                 link = upload_to_dropbox(downloaded_file)
                 st.success("Upload concluído! ✅")
-                # Forçar download
-                link = link.replace("?dl=0", "?dl=1")
-                st.markdown(f"[**Link para download**]({link})")
+                st.markdown(f"[**Clique para download**]({link})")
+
+            except ValueError as ve:
+                if "403" in str(ve):
+                    st.error("Erro 403 ao baixar: vídeo bloqueado ou requer login.")
+                else:
+                    st.error(f"Erro ao baixar: {ve}")
             except Exception as e:
-                st.error(f"Erro ao enviar para Dropbox: {e}")
+                st.error(f"Erro ao baixar ou enviar: {e}")
             finally:
-                # Remove local
-                if os.path.exists(downloaded_file):
+                if downloaded_file and os.path.exists(downloaded_file):
                     os.remove(downloaded_file)
 
 if __name__ == "__main__":
