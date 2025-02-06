@@ -1,91 +1,65 @@
 import os
-import tarfile
-import stat
-import requests
-
-import yt_dlp
+import re
 import dropbox
+import yt_dlp
 from dotenv import load_dotenv
+from datetime import datetime
 
 load_dotenv()
 
-def setup_ffmpeg():
+def sanitize_title(title):
+    """Remove caracteres problemáticos e converte espaços em underscore."""
+    import re
+    title = re.sub(r'[^\w\s-]', '', title, flags=re.UNICODE)
+    title = re.sub(r'[-\s]+', '_', title.strip())
+    return title
+
+def download_video(video_url):
     """
-    Faz download de um build estático do ffmpeg (para Linux x86_64) em /tmp/ffmpeg.
-    Retorna o caminho completo do binário baixado.
-    Se já existir, não baixa novamente.
+    Baixa o vídeo do YouTube usando yt_dlp e retorna o caminho do arquivo.
+    O nome do arquivo fica em 'videos/Título_YYYYMMDD_HHMM.ext'.
     """
-    ffmpeg_bin = "/tmp/ffmpeg"
 
-    if not os.path.isfile(ffmpeg_bin):
-        print("Baixando ffmpeg estático pela primeira vez...")
+    # Garante que a pasta 'videos' exista
+    os.makedirs('videos', exist_ok=True)
 
-        url = "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz"
-        out_tgz = "/tmp/ffmpeg.tar.xz"
+    # Descobre metadados do vídeo (para pegar título)
+    with yt_dlp.YoutubeDL() as ydl_info:
+        info = ydl_info.extract_info(video_url, download=False)
+    raw_title = info.get('title') or 'video_sem_titulo'
+    safe_title = sanitize_title(raw_title)
 
-        # Faz download via requests
-        with requests.get(url, stream=True) as r:
-            r.raise_for_status()
-            with open(out_tgz, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
+    # Gera timestamp
+    now_str = datetime.now().strftime('%Y%m%d_%H%M')
+    final_name = f"{safe_title}_{now_str}"  # ex: MeuVideo_20250206_1530
+    output_path = f"videos/{final_name}.%(ext)s"
 
-        # Extrai o .tar.xz
-        with tarfile.open(out_tgz, "r:xz") as tar:
-            tar.extractall(path="/tmp")
-
-        # Localiza a pasta extraída, ex: /tmp/ffmpeg-5.1.2-amd64-static
-        folder_name = None
-        for fname in os.listdir("/tmp"):
-            full_path = os.path.join("/tmp", fname)
-            if fname.startswith("ffmpeg") and os.path.isdir(full_path):
-                folder_name = fname
-                break
-
-        if not folder_name:
-            raise RuntimeError("Não foi possível localizar a pasta de ffmpeg após extração.")
-
-        extracted_ffmpeg = os.path.join("/tmp", folder_name, "ffmpeg")
-        # Renomeia para /tmp/ffmpeg
-        os.rename(extracted_ffmpeg, ffmpeg_bin)
-
-        # Dá permissão de execução
-        current_stat = os.stat(ffmpeg_bin)
-        os.chmod(ffmpeg_bin, current_stat.st_mode | stat.S_IEXEC)
-
-        print("ffmpeg baixado e configurado em /tmp/ffmpeg")
-
-    return ffmpeg_bin
-
-def download_video(video_url, filename="video_downloaded"):
-    """
-    Faz o download do vídeo usando yt_dlp e retorna o nome completo do arquivo baixado.
-    """
-    ffmpeg_bin = setup_ffmpeg()  # Garante que o ffmpeg esteja disponível
-
+    ffmpeg_bin = "bin/ffmpeg"  # Uso do binário local (sem download dinâmico)
     ydl_opts = {
-        'ffmpeg_location': ffmpeg_bin,
-        'outtmpl': f'{filename}.%(ext)s'
+        'outtmpl': output_path,
+        'ffmpeg_location': ffmpeg_bin
     }
+
+    # Baixa o vídeo
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([video_url])
-    
-    # Descobre qual extensão foi gerada
-    possible_extensions = ["mp4", "mkv", "webm"]
+
+    # Descobre qual extensão foi baixada
+    possible_extensions = ["mp4", "mkv", "webm", "m4a", "mp3"]
     for ext in possible_extensions:
-        full_name = f"{filename}.{ext}"
-        if os.path.exists(full_name):
-            return full_name
-    
+        candidate = f"videos/{final_name}.{ext}"
+        if os.path.exists(candidate):
+            return candidate
+
     return None
 
 def upload_to_dropbox(file_path):
     """
-    Faz upload do arquivo para o Dropbox e retorna um link compartilhável.
+    Faz upload do arquivo para o Dropbox e retorna o link compartilhável.
     """
-    dropbox_token = os.getenv("DROPBOX_ACCESS_TOKEN", None)
+    dropbox_token = os.getenv("DROPBOX_ACCESS_TOKEN")
     if not dropbox_token:
-        raise ValueError("Token do Dropbox não encontrado. Verifique seu .env ou Secrets.")
+        raise ValueError("Faltando DROPBOX_ACCESS_TOKEN (verifique .env ou Streamlit Secrets).")
 
     dbx = dropbox.Dropbox(dropbox_token)
     dropbox_path = f"/{os.path.basename(file_path)}"
@@ -93,5 +67,5 @@ def upload_to_dropbox(file_path):
     with open(file_path, "rb") as f:
         dbx.files_upload(f.read(), dropbox_path, mode=dropbox.files.WriteMode("overwrite"))
 
-    shared_link_metadata = dbx.sharing_create_shared_link_with_settings(dropbox_path)
-    return shared_link_metadata.url
+    link_info = dbx.sharing_create_shared_link_with_settings(dropbox_path)
+    return link_info.url
