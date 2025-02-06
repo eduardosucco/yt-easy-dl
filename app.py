@@ -21,7 +21,6 @@ def main():
     st.sidebar.markdown("""
     **O que faz?**
     - Baixa vídeos ou áudio (MP3) do YouTube.
-    # - Faz upload para o Dropbox em `/streamlit-videos`.
     - Gera um **link** para você baixar o arquivo no seu dispositivo.
     
     **Instruções**:
